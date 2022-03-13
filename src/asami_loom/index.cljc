@@ -75,13 +75,14 @@
   (remove-nodes* [gr nodes]
     (reduce
      (fn [{:keys [spo osp] :as g} node]
-       (let [other-ends (into (apply set/union (vals (spo node))) (keys (osp node)))
+       (let [other-ends (into (set (map keys (vals (spo node))))
+                              (keys (osp node)))
              all-triples (all-triple-edges g node)
-             {:keys [spo* osp*] :as scrubbed} (reduce #(apply graph-delete %1 %2)
+             {:keys [spo osp] :as scrubbed} (reduce #(apply graph-delete %1 %2)
                                                       (graph-delete g node nil nil)  ;; remove if exists
                                                       all-triples)
              ;; find nodes whose edges were removed, and the node is no longer referenced
-             reinserts (remove #(or (spo* %) (osp* %)) other-ends)]
+             reinserts (remove #(or (spo %) (osp %)) other-ends)]
          ;; add back the nodes that are still there but not in edges anymore
          (reduce #(graph-add %1 %2 nil nil) scrubbed reinserts)))
      gr nodes))
@@ -89,12 +90,13 @@
   (remove-edges* [gr edges]
     (reduce
      (fn [{:keys [spo osp] :as g} [s o]]
-       (let [other-ends (into (apply set/union (vals (spo s))) (keys (osp o)))
+       (let [other-ends (into (set (map keys (vals (spo s))))
+                              (keys (osp o)))
              ;; there should only be the :to predicate, but search for any others
              all-triples (for [p (get (osp o) s)] [s p o])
-             {:keys [spo* osp*] :as scrubbed} (reduce #(apply graph-delete %1 %2) g all-triples)
+             {:keys [spo osp] :as scrubbed} (reduce #(apply graph-delete %1 %2) g all-triples)
              ;; find nodes whose edges were removed, and the node is no longer referenced
-             reinserts (remove #(or (spo* %) (osp* %)) other-ends)]
+             reinserts (remove #(or (spo %) (osp %)) other-ends)]
          ;; add back the nodes that are still there but not in edges anymore
          (reduce #(graph-add %1 %2 nil nil) scrubbed reinserts)))
      gr edges))
