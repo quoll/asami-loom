@@ -2,6 +2,7 @@
       :author "Paula Gearon"}
     asami-loom.durable
   (:require [asami.graph :as gr :refer [graph-add graph-delete resolve-triple]]
+            [asami.durable.encoder :as e]
             [clojure.set :as set]
             [loom.graph :as loom :refer [nodes edges has-node? successors* build-graph
                                          out-degree out-edges
@@ -9,6 +10,10 @@
             #?(:clj  [asami.durable.common :as c]
                :cljs [asami.durable.common :as c :refer [BlockGraph]]))
   #?(:clj (:import [asami.index BlockGraph])))
+
+;; It is unusual to call this directly, but the value is constant,
+;; and the usual API needs a pool object to obtain
+(def ^:const nil-node (e/encapsulate-id :tg/nil))
 
 (defn node-only?
   "Tests if a graph contains a node without associated edges"
@@ -93,36 +98,42 @@
            (graph-add s :to o)))
      gr edges))
 
-  ;; below here has been copy/pasted from index.cljc. Not yet converted and will fail
-  (remove-nodes* [gr nodes]
-    (reduce
-     (fn [{:keys [spot ospt] :as g} node]
-       (let [s-statements (c/find-tuples spot [node])  ;; localnode form
-             o-statements (c/find-tuples ospt [node])
-             other-ends (concat (map #(nth % 2) s-statements)
-                                (map #(nth % 1) o-statements))
-             all-triples (all-triple-edges g node)
-             {:keys [spo* osp*] :as scrubbed} (reduce #(apply graph-delete %1 %2)
-                                                      (graph-delete g node nil nil)  ;; remove if exists
-                                                      all-triples)
-             ;; find nodes whose edges were removed, and the node is no longer referenced
-             reinserts (remove #(or (spo* %) (osp* %)) other-ends)]
-         ;; add back the nodes that are still there but not in edges anymore
-         (reduce #(graph-add %1 %2 nil nil) scrubbed reinserts)))
-     gr nodes))
+  (remove-nodes* [{:keys [pool] :as gr} nodes]
+    (->> nodes
+         (map #(find-id pool %))
+         (reduce
+          (fn [{:keys [spot ospt] :as g} node]
+            (let [s-statements (c/find-tuples spot [node]) ;; localnode form
+                  o-statements (c/find-tuples ospt [node])
+                  other-ends (into (set (map #(nth % 2) s-statements))
+                                   (map #(nth % 1) o-statements))
+                  all-triples (all-triple-edges g node)
+                  scrubbed (reduce #(apply graph-delete %1 %2)
+                                   (graph-delete g node nil-node nil-node) ;; remove if exists
+                                   all-triples)
+                  ;; find nodes whose edges were removed, and the node is no longer referenced
+                  reinserts (remove #(or (seq (c/find-tuples spot [%])) (seq (c/find-tuples ospt [%]))) other-ends)]
+              ;; add back the nodes that are still there but not in edges anymore
+              (reduce #(graph-add %1 %2 nil-node nil-node) scrubbed reinserts)))
+          gr)))
 
   (remove-edges* [gr edges]
     (reduce
-     (fn [{:keys [spo osp] :as g} [s o]]
-       (let [other-ends (into (apply set/union (vals (spo s))) (keys (osp o)))
+     (fn [{:keys [spot ospt] :as g} [s o]]
+       (let [s-statements (c/find-tuples spot [node]) ;; localnode form
+             o-statements (c/find-tuples ospt [node])
+             other-ends (into (set (map #(nth % 2) s-statements))
+                              (map #(nth % 1) o-statements))
              ;; there should only be the :to predicate, but search for any others
-             all-triples (for [p (get (osp o) s)] [s p o])
-             {:keys [spo* osp*] :as scrubbed} (reduce #(apply graph-delete %1 %2) g all-triples)
+             all-triples (for [p (c/find-tuples ospt [o-node s-node])] [s p o])
+             {:keys [spot ospt] :as scrubbed} (reduce #(apply graph-delete %1 %2) g all-triples)
              ;; find nodes whose edges were removed, and the node is no longer referenced
-             reinserts (remove #(or (spo* %) (osp* %)) other-ends)]
+             reinserts (remove #(or (seq (c/find-tuples spot [%])) (seq (c/find-tuples ospt [%]))) other-ends)]
          ;; add back the nodes that are still there but not in edges anymore
-         (reduce #(graph-add %1 %2 nil nil) scrubbed reinserts)))
+         (reduce #(graph-add %1 %2 nil-node nil-node) scrubbed reinserts)))
      gr edges))
+
+  ;; below here has been copy/pasted from index.cljc. Not yet converted and will fail
   (remove-all [gr] index/empty-graph)
 
   loom/Digraph
