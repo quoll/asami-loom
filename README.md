@@ -108,6 +108,8 @@ Loom launches the system default viewers for these file types.
 
 Copyright © 2019-2020 Cisco Systems
 
+Copyright © 2022 Paula Gearon
+
 This program and the accompanying materials are made available under the
 terms of the Eclipse Public License 2.0 which is available at
 http://www.eclipse.org/legal/epl-2.0.
