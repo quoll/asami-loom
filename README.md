@@ -2,7 +2,7 @@
 
 [![Clojars Project](http://clojars.org/org.clojars.quoll/asami-loom/latest-version.svg)](http://clojars.org/org.clojars.quoll/asami-loom)
 
-This library extends Asami in-memory graphs to Loom.
+This library extends Asami in-memory graphs to [Loom](https://github.com/aysylu/loom).
 
 By requiring `asami-loom.index`, then the `asami.index.IndexGraph` graphs are extended to:
 - `loom.graph.Graph`
